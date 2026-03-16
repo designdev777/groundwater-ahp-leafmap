@@ -9,6 +9,12 @@ services:
       pip install numpy==1.24.3
       pip install rasterio==1.3.10 --no-binary rasterio
       pip install -r backend/requirements.txt
+      echo "=== Current directory contents ==="
+      ls -la
+      echo "=== Frontend directory contents ==="
+      ls -la frontend/ || echo "❌ frontend/ not found"
+      echo "=== Backend directory contents ==="
+      ls -la backend/
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATA_DIR
