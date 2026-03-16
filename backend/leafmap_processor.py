@@ -21,11 +21,37 @@ class LeafmapGroundwaterProcessor:
     All processing happens locally on the server
     """
 
-    def __init__(self, data_dir: str = None):
-    # Ignore passed data_dir, always use /tmp
+def __init__(self, data_dir: str = None):
+    """
+    Initialize with automatic directory selection
+    """
+    # Always prefer /tmp on Render
     self.data_dir = "/tmp/groundwater-data"
-    print(f"📁 Using hardcoded data directory: {self.data_dir}")
-    self._ensure_data_directories()
+    
+    try:
+        # Create directories
+        os.makedirs(f"{self.data_dir}/preprocessed", exist_ok=True)
+        os.makedirs(f"{self.data_dir}/cache", exist_ok=True)
+        os.makedirs(f"{self.data_dir}/output", exist_ok=True)
+        os.makedirs(f"{self.data_dir}/thumbnails", exist_ok=True)
+        
+        # Verify write permission
+        test_file = f"{self.data_dir}/test.txt"
+        with open(test_file, 'w') as f:
+            f.write("test")
+        os.remove(test_file)
+        
+        print(f"✅ Data directory ready: {self.data_dir}")
+        
+    except (PermissionError, OSError) as e:
+        # Fallback to current directory
+        self.data_dir = os.path.join(os.getcwd(), "data")
+        print(f"⚠️ Falling back to: {self.data_dir}")
+        
+        os.makedirs(f"{self.data_dir}/preprocessed", exist_ok=True)
+        os.makedirs(f"{self.data_dir}/cache", exist_ok=True)
+        os.makedirs(f"{self.data_dir}/output", exist_ok=True)
+        os.makedirs(f"{self.data_dir}/thumbnails", exist_ok=True)
         
     def _ensure_data_directories(self):
         """Create necessary data directories"""
