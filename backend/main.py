@@ -213,7 +213,7 @@ async def process_groundwater_job(job_id: str, extent: list, weights: dict, seas
 
 @app.get("/api/groundwater/status/{job_id}")
 async def get_job_status(job_id: str):
-    if job_id not in jobs:
+    if job_id not in jobs_queue:
         raise HTTPException(404, "Job not found")
     
     job = jobs[job_id]
