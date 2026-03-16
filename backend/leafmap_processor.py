@@ -20,10 +20,16 @@ class LeafmapGroundwaterProcessor:
     Groundwater AHP analysis using leafmap
     All processing happens locally on the server
     """
-    
+  """  
     def __init__(self, data_dir: str = "/app/data"):
         self.data_dir = data_dir
         self._ensure_data_directories()
+"""
+    def __init__(self, data_dir: str = None):
+    # Ignore passed data_dir, always use /tmp
+    self.data_dir = "/tmp/groundwater-data"
+    print(f"📁 Using hardcoded data directory: {self.data_dir}")
+    self._ensure_data_directories()
         
     def _ensure_data_directories(self):
         """Create necessary data directories"""
