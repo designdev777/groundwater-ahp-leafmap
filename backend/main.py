@@ -1,3 +1,14 @@
+"""
+Groundwater AHP API - Main application
+"""
+import sys
+import os
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
@@ -5,14 +16,35 @@ from fastapi.staticfiles import StaticFiles
 import uuid
 import hashlib
 import json
-import os
-from typing import Optional
 
+# Now import from backend module
+from backend.models import GroundwaterRequest, GroundwaterResponse, WEIGHTING_SCHEMES
 from backend.leafmap_processor import LeafmapGroundwaterProcessor
-from models import GroundwaterRequest, GroundwaterResponse, WEIGHTING_SCHEMES
 
 app = FastAPI(title="Groundwater AHP Platform", version="1.0.0")
 
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize processor
+processor = LeafmapGroundwaterProcessor(data_dir=os.getenv("DATA_DIR", "/app/data"))
+
+# Serve frontend
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+@app.get("/")
+async def root():
+    return FileResponse("frontend/index.html")
+
+# ... rest of your endpoints
+
+"""
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +67,7 @@ app.mount("/static", StaticFiles(directory="../frontend"), name="static")
 @app.get("/")
 async def root():
     return FileResponse("../frontend/index.html")
-
+"""
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "processor": "leafmap"}
