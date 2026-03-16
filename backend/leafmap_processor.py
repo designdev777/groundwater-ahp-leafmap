@@ -444,73 +444,80 @@ class LeafmapGroundwaterProcessor:
         print(f"✅ Created weighted overlay: {output_path}")
         return output_path
     
-    def calculate_statistics(self, raster_path: str) -> Dict[str, float]:
-        """
-        Calculate statistics for the result raster
-        """
-        with rasterio.open(raster_path) as src:
-            data = src.read(1)
-            
-            # Handle nodata
-            if src.nodata is not None:
-                data = data[data != src.nodata]
-            else:
-                data = data.flatten()
-            
-            if len(data) == 0:
-                return {
-                    'mean': 0,
-                    'std': 0,
-                    'min': 0,
-                    'max': 0,
-                    'zone_areas': {
-                        'very_low': 0,
-                        'low': 0,
-                        'moderate': 0,
-                        'high': 0,
-                        'very_high': 0
-                    }
+def calculate_statistics(self, raster_path: str) -> Dict[str, float]:
+    """
+    Calculate statistics for the result raster
+    """
+    with rasterio.open(raster_path) as src:
+        data = src.read(1)
+        
+        # Handle nodata
+        if src.nodata is not None:
+            data = data[data != src.nodata]
+        else:
+            data = data.flatten()
+        
+        if len(data) == 0:
+            return {
+                'mean': 0,
+                'std': 0,
+                'min': 0,
+                'max': 0,
+                'zone_areas': {
+                    'very_low': 0,
+                    'low': 0,
+                    'moderate': 0,
+                    'high': 0,
+                    'very_high': 0
                 }
+            }
+        
+        stats = {
+            'mean': float(np.mean(data)),
+            'std': float(np.std(data)),
+            'min': float(np.min(data)),
+            'max': float(np.max(data))
+        }
+        
+        # Calculate zone areas (approximate)
+        with rasterio.open(raster_path) as src_count:
+            full_data = src_count.read(1)
             
-            stats = {
-                'mean': float(np.mean(data)),
-                'std': float(np.std(data)),
-                'min': float(np.min(data)),
-                'max': float(np.max(data))
+            # Zone classification based on value ranges
+            # Define zone thresholds as a dictionary
+            zone_thresholds = {
+                'very_low': (full_data >= 1) & (full_data < 2),
+                'low': (full_data >= 2) & (full_data < 3),
+                'moderate': (full_data >= 3) & (full_data < 4),
+                'high': (full_data >= 4) & (full_data < 5),
+                'very_high': full_data >= 5
             }
             
-            # Calculate zone areas (approximate)
-            with rasterio.open(raster_path) as src_count:
-                full_data = src_count.read(1)
-                
-                # Zone classification based on value ranges
-                zones = {
-                    'very_low': np.sum((full_data >= 1) & (full_data < 2)),
-                    'low': np.sum((full_data >= 2) & (full_data < 3)),
-                    'moderate': np.sum((full_data >= 3) & (full_data < 4)),
-                    'high': np.sum((full_data >= 4) & (full_data < 5)),
-                    'very_high': np.sum(full_data >= 5)
-                }
-                
-                # Remove nodata from counts
-                if src_count.nodata is not None:
-                    nodata_mask = full_data == src_count.nodata
-                    for zone in zones:
-                        zones[zone] = np.sum((full_data >= eval(zone)) & ~nodata_mask)
-                
-                # Calculate pixel area in square kilometers
-                # This is approximate for EPSG:4326
-                transform = src_count.transform
-                pixel_width_deg = abs(transform[0])
-                pixel_height_deg = abs(transform[4])
-                
-                # Convert degrees to km (111km per degree at equator)
-                pixel_area_km2 = (pixel_width_deg * 111) * (pixel_height_deg * 111)
-                
-                zone_areas = {k: float(v * pixel_area_km2) for k, v in zones.items()}
-                stats['zone_areas'] = zone_areas
-        
-        return stats
+            # Create nodata mask if needed
+            if src_count.nodata is not None:
+                nodata_mask = full_data == src_count.nodata
+                # Apply nodata mask to all zone calculations
+                for zone_name in zone_thresholds:
+                    zone_thresholds[zone_name] = zone_thresholds[zone_name] & ~nodata_mask
+            
+            # Calculate pixel counts for each zone
+            zones = {}
+            for zone_name, zone_mask in zone_thresholds.items():
+                zones[zone_name] = np.sum(zone_mask)
+            
+            # Calculate pixel area in square kilometers
+            # This is approximate for EPSG:4326
+            transform = src_count.transform
+            pixel_width_deg = abs(transform[0])
+            pixel_height_deg = abs(transform[4])
+            
+            # Convert degrees to km (111km per degree at equator)
+            pixel_area_km2 = (pixel_width_deg * 111) * (pixel_height_deg * 111)
+            
+            zone_areas = {k: float(v * pixel_area_km2) for k, v in zones.items()}
+            stats['zone_areas'] = zone_areas
+    
+    return stats
     
     def generate_thumbnail(self, raster_path: str) -> str:
         """
