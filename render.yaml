@@ -1,12 +1,13 @@
 services:
   - type: web
     name: groundwater-ahp-leafmap
-    runtime: python
-    repo: https://github.com/YOUR_USERNAME/groundwater-ahp-leafmap
-    plan: free
-    region: oregon
-    branch: main
-    buildCommand: pip install -r backend/requirements.txt
+    env: python
+    pythonVersion: 3.11.8  # Force Python 3.11
+    buildCommand: |
+      pip install --upgrade pip
+      pip install numpy==1.24.3
+      pip install rasterio==1.3.10 --no-binary rasterio
+      pip install -r backend/requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
