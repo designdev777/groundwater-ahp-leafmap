@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Groundwater AHP Platform</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>🌊 Groundwater Potential AHP Platform</h1>
+            <p>Analytical Hierarchy Process for Groundwater Zonation</p>
+        </header>
+
+        <div class="main-content">
+            <div class="control-panel">
+                <h3>Analysis Parameters</h3>
+                
+                <div class="control-group">
+                    <label>Study Area:</label>
+                    <select id="studyArea">
+                        <option value="current">Current Area (Kenya)</option>
+                        <option value="lake_naivasha">Lake Naivasha</option>
+                        <option value="nairobi">Nairobi</option>
+                        <option value="coastal">Coastal Kenya</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Weighting Scheme:</label>
+                    <select id="weightingScheme">
+                        <option value="balanced">Balanced</option>
+                        <option value="hydrogeology_focus">Hydrogeology Focus</option>
+                        <option value="climate_focus">Climate Focus</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Season:</label>
+                    <select id="season">
+                        <option value="transitional">Transitional</option>
+                        <option value="dry">Dry Season</option>
+                        <option value="wet">Wet Season</option>
+                    </select>
+                </div>
+
+                <button onclick="runAnalysis()" class="primary-btn">🚀 Run Analysis</button>
+                
+                <div id="loading" style="display:none;" class="loading">
+                    Processing on server...
+                </div>
+            </div>
+
+            <div class="map-container">
+                <div id="map"></div>
+                
+                <div class="legend">
+                    <h4>Groundwater Potential</h4>
+                    <div><span style="background: #ff0000"></span> Very Low (1)</div>
+                    <div><span style="background: #ff9900"></span> Low (2)</div>
+                    <div><span style="background: #ffff00"></span> Moderate (3)</div>
+                    <div><span style="background: #99ff00"></span> High (4)</div>
+                    <div><span style="background: #00aa00"></span> Very High (5)</div>
+                </div>
+            </div>
+
+            <div class="results-panel">
+                <h3>Results</h3>
+                <div id="results">
+                    <p>Run analysis to see results</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
