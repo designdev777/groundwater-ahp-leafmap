@@ -158,6 +158,9 @@ function displayResults(data) {
         }
         html += '</div>';
     }
+
+    console.log('Result data:', data);
+console.log('Result URL:', data.result_url);
     
     results.innerHTML = html;
 }
