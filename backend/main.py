@@ -98,6 +98,34 @@ async def test():
         "data_dir": DATA_DIR
     }
 
+@app.get("/api/debug/processor")
+async def debug_processor():
+    """Test if processor is working"""
+    try:
+        # Test with minimal extent
+        test_extent = [36.7, -1.5, 36.9, -1.3]
+        test_weights = {"geology": 0.3, "rainfall": 0.3, "slope": 0.2, "landuse": 0.2}
+        
+        # Just test directory creation
+        processor._ensure_data_directories()
+        
+        return {
+            "status": "ok",
+            "data_dir": processor.data_dir,
+            "dir_exists": os.path.exists(processor.data_dir),
+            "writable": os.access(processor.data_dir, os.W_OK) if os.path.exists(processor.data_dir) else False
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }
+
+
+
+
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "processor": "leafmap"}
@@ -158,23 +186,28 @@ async def analyze_groundwater(request: GroundwaterRequest, background_tasks: Bac
 
 async def process_groundwater_job(job_id: str, extent: list, weights: dict, season: str):
     """Background processing of groundwater analysis"""
+    logger.info(f"🚀 Starting job {job_id}")
+    logger.info(f"📊 Extent: {extent}")
+    logger.info(f"⚖️ Weights: {weights}")
+    logger.info(f"🌦️ Season: {season}")
+    
     try:
-        logger.info(f"Processing job {job_id} with extent {extent}")
-        
         # Run leafmap analysis
+        logger.info("Calling processor.full_ahp_analysis...")
         result = processor.full_ahp_analysis(
             extent=extent,
             weights=weights,
             season=season
         )
+        logger.info(f"✅ Analysis complete for job {job_id}")
         
         # Store result
         results_cache[job_id] = result
-        jobs_queue[job_id] = {"status": "completed", "result": result}
-        logger.info(f"Job {job_id} completed successfully")
+        jobs_queue[job_id] = {"status": "completed", "result": job_id}
+        logger.info(f"Job {job_id} stored in cache")
         
     except Exception as e:
-        logger.error(f"Job {job_id} failed: {e}")
+        logger.error(f"❌ Job {job_id} failed: {e}")
         logger.error(traceback.format_exc())
         jobs_queue[job_id] = {"status": "failed", "error": str(e)}
 
@@ -214,3 +247,65 @@ async def get_thumbnail(cache_key: str):
         raise HTTPException(404, "Thumbnail not found")
     
     return FileResponse(results_cache[cache_key]["thumbnail_path"])
+
+@app.get("/api/debug/clean")
+async def clean_jobs():
+    """Clean up stuck jobs"""
+    global jobs_queue, results_cache
+    
+    # Clear everything
+    jobs_queue.clear()
+    results_cache.clear()
+    
+    # Also clean up any files in data directory
+    import shutil
+    data_dirs = [
+        f"{DATA_DIR}/output",
+        f"{DATA_DIR}/cache",
+        f"{DATA_DIR}/thumbnails"
+    ]
+    
+    cleaned = []
+    for d in data_dirs:
+        if os.path.exists(d):
+            for f in os.listdir(d):
+                if f.endswith('.tif') or f.endswith('.png') or f.endswith('.html'):
+                    try:
+                        os.remove(os.path.join(d, f))
+                        cleaned.append(f)
+                    except:
+                        pass
+    
+    return {
+        "status": "cleaned",
+        "jobs_queue": "cleared",
+        "results_cache": "cleared",
+        "files_removed": len(cleaned)
+    }
+
+@app.get("/api/test/minimal")
+async def test_minimal():
+    """Run a minimal analysis for testing"""
+    try:
+        test_extent = [36.7, -1.5, 36.9, -1.3]
+        test_weights = {"geology": 0.3, "rainfall": 0.3, "slope": 0.2, "landuse": 0.2}
+        
+        # Run directly (not in background)
+        result = processor.full_ahp_analysis(
+            extent=test_extent,
+            weights=test_weights,
+            season="transitional"
+        )
+        
+        return {
+            "status": "success",
+            "message": "Analysis completed",
+            "has_result": bool(result),
+            "statistics": result.get("statistics")
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }
