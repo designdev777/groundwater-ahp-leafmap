@@ -519,48 +519,48 @@ class LeafmapGroundwaterProcessor:
         
         return stats
     
-    def generate_thumbnail(self, raster_path: str) -> str:
-        """
-        Generate PNG thumbnail for web display
-        """
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import LinearSegmentedColormap
-        
-        # Create output path
-        base_name = os.path.basename(raster_path).replace('.tif', '.png')
-        output_path = f"{self.data_dir}/thumbnails/{base_name}"
-        
-        if os.path.exists(output_path):
-            return output_path
-        
-        # Read raster
-        with rasterio.open(raster_path) as src:
-            data = src.read(1)
-            
-            # Handle nodata
-            if src.nodata is not None:
-                data = np.ma.masked_where(data == src.nodata, data)
-        
-        # Create custom colormap (red to green)
-        colors = ['#ff0000', '#ff9900', '#ffff00', '#99ff00', '#00aa00']
-        cmap = LinearSegmentedColormap.from_list('gwpz', colors, N=5)
-        
-        # Create figure
-        fig, ax = plt.subplots(figsize=(10, 8))
-        im = ax.imshow(data, cmap=cmap, vmin=1, vmax=5)
-        ax.set_title('Groundwater Potential Zones')
-        ax.axis('off')
-        
-        # Add colorbar
-        cbar = plt.colorbar(im, ax=ax, ticks=[1.5, 2.5, 3.5, 4.5])
-        cbar.ax.set_yticklabels(['Very Low', 'Low', 'Moderate', 'High', 'Very High'])
-        
-        # Save
-        plt.savefig(output_path, bbox_inches='tight', dpi=100)
-        plt.close()
-        
-        print(f"✅ Generated thumbnail: {output_path}")
+def generate_thumbnail(self, raster_path: str) -> str:
+    """
+    Generate PNG thumbnail for web display
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
+    
+    # Create output path
+    base_name = os.path.basename(raster_path).replace('.tif', '.png')
+    output_path = f"{self.data_dir}/thumbnails/{base_name}"
+    
+    if os.path.exists(output_path):
         return output_path
+    
+    # Read raster
+    with rasterio.open(raster_path) as src:
+        data = src.read(1)
+        
+        # Handle nodata
+        if src.nodata is not None:
+            data = np.ma.masked_where(data == src.nodata, data)
+    
+    # Create custom colormap (red to green)
+    colors = ['#ff0000', '#ff9900', '#ffff00', '#99ff00', '#00aa00']
+    cmap = LinearSegmentedColormap.from_list('gwpz', colors, N=5)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.imshow(data, cmap=cmap, vmin=1, vmax=5)
+    ax.set_title('Groundwater Potential Zones')
+    ax.axis('off')
+    
+    # Add colorbar with correct number of ticks and labels
+    cbar = plt.colorbar(im, ax=ax, ticks=[1.4, 2.2, 3.0, 3.8, 4.6])
+    cbar.ax.set_yticklabels(['Very Low', 'Low', 'Moderate', 'High', 'Very High'])
+    
+    # Save
+    plt.savefig(output_path, bbox_inches='tight', dpi=100)
+    plt.close()
+    
+    print(f"✅ Generated thumbnail: {output_path}")
+    return output_path
     
     def create_interactive_map(self, result_path: str, html_path: str = None) -> str:
         """
