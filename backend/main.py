@@ -119,61 +119,60 @@ async def get_weighting_schemes():
 
 @app.post("/api/groundwater/analyze", response_model=GroundwaterResponse)
 async def analyze_groundwater(request: GroundwaterRequest, background_tasks: BackgroundTasks):
-    job_id = str(uuid.uuid4())
-    
-    # Get weights
-    if request.weighting_scheme == "custom" and request.custom_weights:
-        weights = request.custom_weights
-    else:
-        weights = WEIGHTING_SCHEMES.get(request.weighting_scheme, WEIGHTING_SCHEMES["balanced"])
-    
-    # Check cache
-    cache_key = hashlib.md5(
-        json.dumps({
-            "extent": request.extent,
-            "weights": weights,
-            "season": request.season
-        }).encode()
-    ).hexdigest()
-    
-    if cache_key in results_cache:
+    """Analyze groundwater potential using AHP"""
+    try:
+        job_id = str(uuid.uuid4())
+        logger.info(f"Starting analysis job {job_id} with request: {request}")
+        
+        # Get weights based on scheme
+        if request.weighting_scheme == "custom" and request.custom_weights:
+            weights = request.custom_weights
+        else:
+            weights = WEIGHTING_SCHEMES.get(request.weighting_scheme, WEIGHTING_SCHEMES["balanced"])
+        
+        # Queue for processing
+        jobs_queue[job_id] = {"status": "processing", "request": request.dict()}
+        
+        # Process in background
+        background_tasks.add_task(
+            process_groundwater_job,
+            job_id, request.extent, weights, request.season
+        )
+        
         return GroundwaterResponse(
             job_id=job_id,
-            status="completed",
-            result_url=f"/results/{cache_key}.html",
-            thumbnail_url=f"/thumbnails/{cache_key}.png",
-            statistics=results_cache[cache_key]["statistics"],
+            status="processing",
             weights_used=weights
         )
-    
-    # Queue for processing
-    jobs[job_id] = {"status": "processing"}
-    
-    # Process in background
-    background_tasks.add_task(
-        process_groundwater_job,
-        job_id, request.extent, weights, request.season, cache_key
-    )
-    
-    return GroundwaterResponse(
-        job_id=job_id,
-        status="processing",
-        weights_used=weights
-    )
+    except Exception as e:
+        logger.error(f"Error in analyze_groundwater: {e}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "trace": traceback.format_exc()}
+        )
 
-async def process_groundwater_job(job_id, extent, weights, season, cache_key):
+async def process_groundwater_job(job_id: str, extent: list, weights: dict, season: str):
+    """Background processing of groundwater analysis"""
     try:
+        logger.info(f"Processing job {job_id} with extent {extent}")
+        
         # Run leafmap analysis
-        result = processor.full_ahp_analysis(extent, weights, season)
+        result = processor.full_ahp_analysis(
+            extent=extent,
+            weights=weights,
+            season=season
+        )
         
-        # Store in cache
-        results_cache[cache_key] = result
-        
-        # Update job status
-        jobs[job_id] = {"status": "completed", "result": result}
+        # Store result
+        results_cache[job_id] = result
+        jobs_queue[job_id] = {"status": "completed", "result": result}
+        logger.info(f"Job {job_id} completed successfully")
         
     except Exception as e:
-        jobs[job_id] = {"status": "failed", "error": str(e)}
+        logger.error(f"Job {job_id} failed: {e}")
+        logger.error(traceback.format_exc())
+        jobs_queue[job_id] = {"status": "failed", "error": str(e)}
 
 @app.get("/api/groundwater/status/{job_id}")
 async def get_job_status(job_id: str):
