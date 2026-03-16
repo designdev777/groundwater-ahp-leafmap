@@ -5,6 +5,10 @@ import sys
 import os
 from pathlib import Path
 
+# Define FRONTEND_DIR
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR / "frontend"
+
 import logging
 import traceback
 
