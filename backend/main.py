@@ -44,64 +44,9 @@ app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 @app.get("/")
 async def root():
-    """Serve the main HTML interface with fallback"""
-    index_path = FRONTEND_DIR / "index.html"
-    if index_path.exists():
-        return FileResponse(str(index_path))
-    else:
-        # Serve a simple built-in HTML page
-        html_content = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Groundwater AHP Platform</title>
-            <style>
-                body { font-family: Arial; margin: 40px; }
-                .error { color: red; }
-            </style>
-        </head>
-        <body>
-            <h1>🌊 Groundwater AHP Platform</h1>
-            <p>API is running but frontend files are missing.</p>
-            <p class="error">Frontend directory not found at: {}</p>
-            <h2>Available API Endpoints:</h2>
-            <ul>
-                <li><a href="/docs">/docs</a> - API Documentation</li>
-                <li><a href="/api/health">/api/health</a> - Health Check</li>
-                <li><a href="/api/study-areas">/api/study-areas</a> - Study Areas</li>
-                <li><a href="/api/weighting-schemes">/api/weighting-schemes</a> - Weighting Schemes</li>
-            </ul>
-        </body>
-        </html>
-        """.format(FRONTEND_DIR)
-        return HTMLResponse(content=html_content)
-
-# ... rest of your endpoints
-
-"""
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialize processor
-processor = LeafmapGroundwaterProcessor(data_dir="/app/data")
-
-# Job tracking
-jobs = {}
-results_cache = {}
-
-# Serve frontend
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
-
-@app.get("/")
-async def root():
-    return FileResponse("../frontend/index.html")
-"""
+    """Serve the main HTML interface"""
+    return FileResponse(str(FRONTEND_DIR / "index.html"))
+    
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "processor": "leafmap"}
