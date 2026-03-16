@@ -20,38 +20,85 @@ class LeafmapGroundwaterProcessor:
     Groundwater AHP analysis using leafmap
     All processing happens locally on the server
     """
-
-def __init__(self, data_dir: str = None):
-    """
-    Initialize with automatic directory selection
-    """
-    # Always prefer /tmp on Render
-    self.data_dir = "/tmp/groundwater-data"
     
-    try:
-        # Create directories
-        os.makedirs(f"{self.data_dir}/preprocessed", exist_ok=True)
-        os.makedirs(f"{self.data_dir}/cache", exist_ok=True)
-        os.makedirs(f"{self.data_dir}/output", exist_ok=True)
-        os.makedirs(f"{self.data_dir}/thumbnails", exist_ok=True)
+    def __init__(self, data_dir: str = None):
+        """
+        Initialize processor with automatic directory selection
         
-        # Verify write permission
-        test_file = f"{self.data_dir}/test.txt"
-        with open(test_file, 'w') as f:
-            f.write("test")
-        os.remove(test_file)
+        Args:
+            data_dir: Optional path to data directory. If None, uses env var or defaults.
+        """
+        # Priority: 1. Passed argument, 2. Environment variable, 3. Default
+        if data_dir is not None:
+            self.data_dir = data_dir
+        else:
+            self.data_dir = os.getenv("DATA_DIR", "/tmp/groundwater-data")
         
-        print(f"✅ Data directory ready: {self.data_dir}")
+        print(f"🔧 Initializing processor...")
+        print(f"📁 Requested data directory: {self.data_dir}")
         
-    except (PermissionError, OSError) as e:
-        # Fallback to current directory
-        self.data_dir = os.path.join(os.getcwd(), "data")
-        print(f"⚠️ Falling back to: {self.data_dir}")
+        # Try to set up directories
+        if not self._setup_directories():
+            # If failed, try fallback locations
+            self._try_fallback_directories()
+    
+    def _setup_directories(self) -> bool:
+        """Try to create directories in current path, return True if successful"""
+        try:
+            # Create all required subdirectories
+            os.makedirs(f"{self.data_dir}/preprocessed", exist_ok=True)
+            os.makedirs(f"{self.data_dir}/cache", exist_ok=True)
+            os.makedirs(f"{self.data_dir}/output", exist_ok=True)
+            os.makedirs(f"{self.data_dir}/thumbnails", exist_ok=True)
+            
+            # Test write permission
+            test_file = f"{self.data_dir}/test_write.txt"
+            with open(test_file, 'w') as f:
+                f.write("test")
+            os.remove(test_file)
+            
+            print(f"✅ Successfully using: {self.data_dir}")
+            return True
+            
+        except (PermissionError, OSError) as e:
+            print(f"⚠️ Cannot use {self.data_dir}: {e}")
+            return False
+    
+    def _try_fallback_directories(self):
+        """Try alternative directories if primary fails"""
+        fallback_dirs = [
+            "/tmp/groundwater-data",
+            os.path.join(os.getcwd(), "data"),
+            tempfile.mkdtemp(prefix="groundwater-"),
+            "./data"
+        ]
         
-        os.makedirs(f"{self.data_dir}/preprocessed", exist_ok=True)
-        os.makedirs(f"{self.data_dir}/cache", exist_ok=True)
-        os.makedirs(f"{self.data_dir}/output", exist_ok=True)
-        os.makedirs(f"{self.data_dir}/thumbnails", exist_ok=True)
+        for fallback in fallback_dirs:
+            if fallback == self.data_dir:
+                continue  # Skip if same as primary
+                
+            try:
+                os.makedirs(f"{fallback}/preprocessed", exist_ok=True)
+                os.makedirs(f"{fallback}/cache", exist_ok=True)
+                os.makedirs(f"{fallback}/output", exist_ok=True)
+                os.makedirs(f"{fallback}/thumbnails", exist_ok=True)
+                
+                # Test write
+                test_file = f"{fallback}/test.txt"
+                with open(test_file, 'w') as f:
+                    f.write("test")
+                os.remove(test_file)
+                
+                self.data_dir = fallback
+                print(f"✅ Using fallback directory: {self.data_dir}")
+                return
+                
+            except (PermissionError, OSError) as e:
+                print(f"⚠️ Cannot use fallback {fallback}: {e}")
+                continue
+        
+        # If all fallbacks fail, raise error
+        raise PermissionError("Cannot find any writable directory for data storage")
         
     def _ensure_data_directories(self):
         """Create necessary data directories"""
