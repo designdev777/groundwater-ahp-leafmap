@@ -5,6 +5,10 @@ import sys
 import os
 from pathlib import Path
 
+print(f"🔍 DATA_DIR environment variable: {os.getenv('DATA_DIR')}")
+print(f"🔍 Current working directory: {os.getcwd()}")
+print(f"🔍 Can write to /tmp: {os.access('/tmp', os.W_OK)}")
+
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -33,7 +37,7 @@ app.add_middleware(
 )
 
 # Initialize processor
-processor = LeafmapGroundwaterProcessor(data_dir=os.getenv("DATA_DIR", "/app/data"))
+processor = LeafmapGroundwaterProcessor(data_dir=os.getenv("DATA_DIR"))
 
 # Serve frontend
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
