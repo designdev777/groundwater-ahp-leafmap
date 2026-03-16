@@ -527,10 +527,8 @@ class LeafmapGroundwaterProcessor:
         
         return html
     
-    def full_ahp_analysis(self, 
-                          extent: List[float],
-                          weights: Dict[str, float],
-                          season: str = 'transitional') -> Dict[str, Any]:
+    def full_ahp_analysis(self, extent, weights, season='transitional'):
+
         """
         Run complete AHP groundwater analysis
         """
@@ -598,3 +596,47 @@ class LeafmapGroundwaterProcessor:
             'weights_used': weights,
             'season': season
         }
+
+def full_ahp_analysis(self, extent, weights, season='transitional'):
+    # ... your existing code ...
+    
+    # Generate a unique filename
+    import hashlib
+    import time
+    unique_id = hashlib.md5(f"{extent}{weights}{season}{time.time()}".encode()).hexdigest()[:8]
+    
+    # Save result as PNG for easy viewing
+    png_path = f"{self.data_dir}/output/gwpz_{unique_id}.png"
+    self._save_as_png(result_path, png_path)
+    
+    # Also create interactive HTML
+    html_path = f"{self.data_dir}/output/gwpz_{unique_id}.html"
+    self.create_interactive_map(result_path, html_path)
+    
+    return {
+        'result_path': result_path,
+        'thumbnail_path': thumb_path,
+        'result_url': f"/results/{unique_id}.png",  # Public URL
+        'interactive_url': f"/results/{unique_id}.html",  # Public URL
+        'statistics': stats,
+        'weights_used': weights,
+        'season': season
+    }
+
+def _save_as_png(self, raster_path, png_path):
+    """Save raster as PNG for web display"""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
+    
+    with rasterio.open(raster_path) as src:
+        data = src.read(1)
+        
+    # Create custom colormap
+    colors = ['#ff0000', '#ff9900', '#ffff00', '#99ff00', '#00aa00']
+    cmap = LinearSegmentedColormap.from_list('gwpz', colors, N=5)
+    
+    plt.figure(figsize=(10, 8))
+    plt.imshow(data, cmap=cmap, vmin=1, vmax=5)
+    plt.axis('off')
+    plt.savefig(png_path, bbox_inches='tight', dpi=100, transparent=True)
+    plt.close()
