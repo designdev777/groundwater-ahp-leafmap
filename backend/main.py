@@ -5,6 +5,41 @@ import sys
 import os
 from pathlib import Path
 
+import logging
+import traceback
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Then wrap your root endpoint with error handling:
+@app.get("/")
+async def root():
+    """Serve the main HTML interface"""
+    try:
+        index_path = FRONTEND_DIR / "index.html"
+        logger.info(f"Attempting to serve: {index_path}")
+        logger.info(f"File exists: {index_path.exists()}")
+        
+        if not index_path.exists():
+            logger.error(f"index.html not found at {index_path}")
+            # List directory contents
+            if FRONTEND_DIR.exists():
+                logger.info(f"Frontend dir contents: {list(FRONTEND_DIR.glob('*'))}")
+            return JSONResponse(
+                status_code=404,
+                content={"error": "index.html not found", "path": str(index_path)}
+            )
+        
+        return FileResponse(str(index_path))
+    except Exception as e:
+        logger.error(f"Error serving root: {e}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "trace": traceback.format_exc()}
+        )
+
 print(f"🔍 DATA_DIR environment variable: {os.getenv('DATA_DIR')}")
 print(f"🔍 Current working directory: {os.getcwd()}")
 print(f"🔍 Can write to /tmp: {os.access('/tmp', os.W_OK)}")
