@@ -12,33 +12,7 @@ import traceback
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Then wrap your root endpoint with error handling:
-@app.get("/")
-async def root():
-    """Serve the main HTML interface"""
-    try:
-        index_path = FRONTEND_DIR / "index.html"
-        logger.info(f"Attempting to serve: {index_path}")
-        logger.info(f"File exists: {index_path.exists()}")
-        
-        if not index_path.exists():
-            logger.error(f"index.html not found at {index_path}")
-            # List directory contents
-            if FRONTEND_DIR.exists():
-                logger.info(f"Frontend dir contents: {list(FRONTEND_DIR.glob('*'))}")
-            return JSONResponse(
-                status_code=404,
-                content={"error": "index.html not found", "path": str(index_path)}
-            )
-        
-        return FileResponse(str(index_path))
-    except Exception as e:
-        logger.error(f"Error serving root: {e}")
-        logger.error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e), "trace": traceback.format_exc()}
-        )
+
 
 print(f"🔍 DATA_DIR environment variable: {os.getenv('DATA_DIR')}")
 print(f"🔍 Current working directory: {os.getcwd()}")
@@ -77,11 +51,45 @@ processor = LeafmapGroundwaterProcessor(data_dir=os.getenv("DATA_DIR"))
 # Serve frontend
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
+# Then wrap your root endpoint with error handling:
 @app.get("/")
 async def root():
     """Serve the main HTML interface"""
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
-    
+    try:
+        index_path = FRONTEND_DIR / "index.html"
+        logger.info(f"Attempting to serve: {index_path}")
+        logger.info(f"File exists: {index_path.exists()}")
+        
+        if not index_path.exists():
+            logger.error(f"index.html not found at {index_path}")
+            # List directory contents
+            if FRONTEND_DIR.exists():
+                logger.info(f"Frontend dir contents: {list(FRONTEND_DIR.glob('*'))}")
+            return JSONResponse(
+                status_code=404,
+                content={"error": "index.html not found", "path": str(index_path)}
+            )
+        
+        return FileResponse(str(index_path))
+    except Exception as e:
+        logger.error(f"Error serving root: {e}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "trace": traceback.format_exc()}
+        )
+
+@app.get("/api/test")
+async def test():
+    """Simple test endpoint"""
+    return {
+        "status": "ok",
+        "message": "API is working",
+        "frontend_exists": FRONTEND_DIR.exists(),
+        "index_exists": (FRONTEND_DIR / "index.html").exists(),
+        "data_dir": DATA_DIR
+    }
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "processor": "leafmap"}
