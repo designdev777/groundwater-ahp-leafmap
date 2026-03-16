@@ -215,7 +215,9 @@ class LeafmapGroundwaterProcessor:
     
     def _create_synthetic_rainfall(self, extent: List[float], output_path: str, season: str):
         """Create synthetic rainfall for testing"""
-        from osgeo import gdal
+            import numpy as np
+            import rasterio
+            from rasterio.transform import from_origin
         
         minx, miny, maxx, maxy = extent
         
@@ -250,7 +252,9 @@ class LeafmapGroundwaterProcessor:
         output_path = f"{self.data_dir}/cache/geology_{'_'.join(map(str, extent))}.tif"
         
         if not os.path.exists(output_path):
-            from osgeo import gdal
+                import numpy as np
+                import rasterio
+                from rasterio.transform import from_origin
             
             minx, miny, maxx, maxy = extent
             width = height = 100
@@ -279,7 +283,9 @@ class LeafmapGroundwaterProcessor:
         output_path = f"{self.data_dir}/cache/landuse_{'_'.join(map(str, extent))}.tif"
         
         if not os.path.exists(output_path):
-            from osgeo import gdal
+                import numpy as np
+                import rasterio
+                from rasterio.transform import from_origin
             
             minx, miny, maxx, maxy = extent
             width = height = 100
