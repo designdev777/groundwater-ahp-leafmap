@@ -15,7 +15,7 @@ Pillow==10.0.1
 matplotlib==3.7.1
 
 # Add GDAL
-gdal==3.4.3
+# gdal==3.4.3
 
 # System utilities
 python-dotenv==1.0.0
