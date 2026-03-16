@@ -14,6 +14,11 @@ from typing import List, Dict, Any, Tuple
 import xarray as xr
 import rioxarray
 import json
+import hashlib
+import time
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+
 
 class LeafmapGroundwaterProcessor:
     """
@@ -99,7 +104,7 @@ class LeafmapGroundwaterProcessor:
         
         # If all fallbacks fail, raise error
         raise PermissionError("Cannot find any writable directory for data storage")
-        
+    
     def _ensure_data_directories(self):
         """Create necessary data directories"""
         os.makedirs(f"{self.data_dir}/preprocessed", exist_ok=True)
@@ -121,43 +126,43 @@ class LeafmapGroundwaterProcessor:
             
         return output_path
     
-   def _create_synthetic_dem(self, extent: List[float], output_path: str, resolution: int):
-    """Create synthetic DEM using rasterio only (no osgeo)"""
-    import numpy as np
-    import rasterio
-    from rasterio.transform import from_origin
-    
-    minx, miny, maxx, maxy = extent
-    width = height = resolution
-    
-    # Create synthetic elevation with hills
-    x = np.linspace(0, 2*np.pi, width)
-    y = np.linspace(0, 2*np.pi, height)
-    X, Y = np.meshgrid(x, y)
-    elevation = 1000 + 200 * np.sin(X) * np.cos(Y) + 100 * np.sin(2*X)
-    
-    # Calculate pixel size
-    pixel_width = (maxx - minx) / width
-    pixel_height = (maxy - miny) / height
-    
-    # Create transform
-    transform = from_origin(minx, maxy, pixel_width, pixel_height)
-    
-    # Write with rasterio (no osgeo needed)
-    with rasterio.open(
-        output_path,
-        'w',
-        driver='GTiff',
-        height=height,
-        width=width,
-        count=1,
-        dtype=elevation.dtype,
-        crs='EPSG:4326',
-        transform=transform
-    ) as dst:
-        dst.write(elevation, 1)
-    
-    print(f"✅ Created synthetic DEM: {output_path}")
+    def _create_synthetic_dem(self, extent: List[float], output_path: str, resolution: int):
+        """Create synthetic DEM using rasterio only (no osgeo)"""
+        import numpy as np
+        import rasterio
+        from rasterio.transform import from_origin
+        
+        minx, miny, maxx, maxy = extent
+        width = height = resolution
+        
+        # Create synthetic elevation with hills
+        x = np.linspace(0, 2*np.pi, width)
+        y = np.linspace(0, 2*np.pi, height)
+        X, Y = np.meshgrid(x, y)
+        elevation = 1000 + 200 * np.sin(X) * np.cos(Y) + 100 * np.sin(2*X)
+        
+        # Calculate pixel size
+        pixel_width = (maxx - minx) / width
+        pixel_height = (maxy - miny) / height
+        
+        # Create transform
+        transform = from_origin(minx, maxy, pixel_width, pixel_height)
+        
+        # Write with rasterio (no osgeo needed)
+        with rasterio.open(
+            output_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=1,
+            dtype=elevation.dtype,
+            crs='EPSG:4326',
+            transform=transform
+        ) as dst:
+            dst.write(elevation, 1)
+        
+        print(f"✅ Created synthetic DEM: {output_path}")
     
     def calculate_slope(self, dem_path: str) -> str:
         """
@@ -238,13 +243,27 @@ class LeafmapGroundwaterProcessor:
         base_rainfall = 100 + 50 * np.sin(X) * np.cos(Y)
         rainfall = base_rainfall * season_mult
         
+        # Calculate pixel size
+        pixel_width = (maxx - minx) / width
+        pixel_height = (maxy - miny) / height
+        
+        # Create transform
+        transform = from_origin(minx, maxy, pixel_width, pixel_height)
+        
         # Write to GeoTIFF
-        driver = gdal.GetDriverByName('GTiff')
-        ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32)
-        ds.SetGeoTransform([minx, (maxx-minx)/width, 0, maxy, 0, -(maxy-miny)/height])
-        ds.SetProjection('EPSG:4326')
-        ds.GetRasterBand(1).WriteArray(rainfall)
-        ds.FlushCache()
+        with rasterio.open(
+            output_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=1,
+            dtype=rainfall.dtype,
+            crs='EPSG:4326',
+            transform=transform
+        ) as dst:
+            dst.write(rainfall, 1)
+        
         print(f"✅ Created synthetic rainfall: {output_path}")
     
     def _create_synthetic_geology(self, extent: List[float]) -> str:
@@ -268,12 +287,27 @@ class LeafmapGroundwaterProcessor:
             geology = 3 + 2 * np.sin(X * 3) * np.cos(Y * 3)
             geology = np.clip(geology, 1, 5).astype(np.int16)
             
-            driver = gdal.GetDriverByName('GTiff')
-            ds = driver.Create(output_path, width, height, 1, gdal.GDT_Int16)
-            ds.SetGeoTransform([minx, (maxx-minx)/width, 0, maxy, 0, -(maxy-miny)/height])
-            ds.SetProjection('EPSG:4326')
-            ds.GetRasterBand(1).WriteArray(geology)
-            ds.FlushCache()
+            # Calculate pixel size
+            pixel_width = (maxx - minx) / width
+            pixel_height = (maxy - miny) / height
+            
+            # Create transform
+            transform = from_origin(minx, maxy, pixel_width, pixel_height)
+            
+            # Write to GeoTIFF
+            with rasterio.open(
+                output_path,
+                'w',
+                driver='GTiff',
+                height=height,
+                width=width,
+                count=1,
+                dtype=geology.dtype,
+                crs='EPSG:4326',
+                transform=transform
+            ) as dst:
+                dst.write(geology, 1)
+            
             print(f"✅ Created synthetic geology: {output_path}")
         
         return output_path
@@ -299,12 +333,27 @@ class LeafmapGroundwaterProcessor:
             landuse = 3 + 2 * np.sin(X * 5) * np.cos(Y * 5)
             landuse = np.clip(landuse, 1, 5).astype(np.int16)
             
-            driver = gdal.GetDriverByName('GTiff')
-            ds = driver.Create(output_path, width, height, 1, gdal.GDT_Int16)
-            ds.SetGeoTransform([minx, (maxx-minx)/width, 0, maxy, 0, -(maxy-miny)/height])
-            ds.SetProjection('EPSG:4326')
-            ds.GetRasterBand(1).WriteArray(landuse)
-            ds.FlushCache()
+            # Calculate pixel size
+            pixel_width = (maxx - minx) / width
+            pixel_height = (maxy - miny) / height
+            
+            # Create transform
+            transform = from_origin(minx, maxy, pixel_width, pixel_height)
+            
+            # Write to GeoTIFF
+            with rasterio.open(
+                output_path,
+                'w',
+                driver='GTiff',
+                height=height,
+                width=width,
+                count=1,
+                dtype=landuse.dtype,
+                crs='EPSG:4326',
+                transform=transform
+            ) as dst:
+                dst.write(landuse, 1)
+            
             print(f"✅ Created synthetic landuse: {output_path}")
         
         return output_path
@@ -506,10 +555,15 @@ class LeafmapGroundwaterProcessor:
         print(f"✅ Generated thumbnail: {output_path}")
         return output_path
     
-    def create_interactive_map(self, result_path: str) -> str:
+    def create_interactive_map(self, result_path: str, html_path: str = None) -> str:
         """
         Create interactive HTML map using regular leafmap (no maplibre)
         """
+        if html_path is None:
+            # Generate a unique filename
+            unique_id = hashlib.md5(f"{result_path}{time.time()}".encode()).hexdigest()[:8]
+            html_path = f"{self.data_dir}/output/gwpz_{unique_id}.html"
+        
         # Create map centered on Kenya
         m = leafmap.Map(center=[-1.4, 36.8], zoom=9)
         m.add_basemap("OpenStreetMap")
@@ -547,10 +601,29 @@ class LeafmapGroundwaterProcessor:
         html = m.to_html()
         html = html.replace('</body>', f'{legend_html}</body>')
         
-        return html
+        # Save to file
+        with open(html_path, 'w') as f:
+            f.write(html)
+        
+        print(f"✅ Created interactive map: {html_path}")
+        return html_path
+    
+    def _save_as_png(self, raster_path: str, png_path: str):
+        """Save raster as PNG for web display"""
+        with rasterio.open(raster_path) as src:
+            data = src.read(1)
+        
+        # Create custom colormap
+        colors = ['#ff0000', '#ff9900', '#ffff00', '#99ff00', '#00aa00']
+        cmap = LinearSegmentedColormap.from_list('gwpz', colors, N=5)
+        
+        plt.figure(figsize=(10, 8))
+        plt.imshow(data, cmap=cmap, vmin=1, vmax=5)
+        plt.axis('off')
+        plt.savefig(png_path, bbox_inches='tight', dpi=100, transparent=True)
+        plt.close()
     
     def full_ahp_analysis(self, extent, weights, season='transitional'):
-
         """
         Run complete AHP groundwater analysis
         """
@@ -602,63 +675,30 @@ class LeafmapGroundwaterProcessor:
         print("📊 Calculating statistics...")
         stats = self.calculate_statistics(result_path)
         
+        # Generate a unique filename
+        unique_id = hashlib.md5(f"{extent}{weights}{season}{time.time()}".encode()).hexdigest()[:8]
+        
         # 7. Generate thumbnail and interactive map
         print("🖼️ Generating thumbnail...")
         thumb_path = self.generate_thumbnail(result_path)
+        
+        # Save result as PNG for easy viewing
+        png_path = f"{self.data_dir}/output/gwpz_{unique_id}.png"
+        self._save_as_png(result_path, png_path)
+        
+        # Also create interactive HTML
         print("🗺️ Creating interactive map...")
-        interactive_html = self.create_interactive_map(result_path)
+        html_path = f"{self.data_dir}/output/gwpz_{unique_id}.html"
+        self.create_interactive_map(result_path, html_path)
         
         print("✅ Analysis complete!")
         
         return {
             'result_path': result_path,
             'thumbnail_path': thumb_path,
-            'interactive_html': interactive_html,
+            'result_url': f"/results/gwpz_{unique_id}.png",  # Public URL
+            'interactive_url': f"/results/gwpz_{unique_id}.html",  # Public URL
             'statistics': stats,
             'weights_used': weights,
             'season': season
         }
-
-def full_ahp_analysis(self, extent, weights, season='transitional'):
-    # ... your existing code ...
-    
-    # Generate a unique filename
-    import hashlib
-    import time
-    unique_id = hashlib.md5(f"{extent}{weights}{season}{time.time()}".encode()).hexdigest()[:8]
-    
-    # Save result as PNG for easy viewing
-    png_path = f"{self.data_dir}/output/gwpz_{unique_id}.png"
-    self._save_as_png(result_path, png_path)
-    
-    # Also create interactive HTML
-    html_path = f"{self.data_dir}/output/gwpz_{unique_id}.html"
-    self.create_interactive_map(result_path, html_path)
-    
-    return {
-        'result_path': result_path,
-        'thumbnail_path': thumb_path,
-        'result_url': f"/results/{unique_id}.png",  # Public URL
-        'interactive_url': f"/results/{unique_id}.html",  # Public URL
-        'statistics': stats,
-        'weights_used': weights,
-        'season': season
-    }
-
-def _save_as_png(self, raster_path, png_path):
-    """Save raster as PNG for web display"""
-    import matplotlib.pyplot as plt
-    from matplotlib.colors import LinearSegmentedColormap
-    
-    with rasterio.open(raster_path) as src:
-        data = src.read(1)
-        
-    # Create custom colormap
-    colors = ['#ff0000', '#ff9900', '#ffff00', '#99ff00', '#00aa00']
-    cmap = LinearSegmentedColormap.from_list('gwpz', colors, N=5)
-    
-    plt.figure(figsize=(10, 8))
-    plt.imshow(data, cmap=cmap, vmin=1, vmax=5)
-    plt.axis('off')
-    plt.savefig(png_path, bbox_inches='tight', dpi=100, transparent=True)
-    plt.close()
