@@ -121,27 +121,43 @@ class LeafmapGroundwaterProcessor:
             
         return output_path
     
-    def _create_synthetic_dem(self, extent: List[float], output_path: str, resolution: int):
-        """Create synthetic DEM for testing"""
-        from osgeo import gdal
-        
-        minx, miny, maxx, maxy = extent
-        width = height = resolution
-        
-        # Create synthetic elevation with hills
-        x = np.linspace(0, 2*np.pi, width)
-        y = np.linspace(0, 2*np.pi, height)
-        X, Y = np.meshgrid(x, y)
-        elevation = 1000 + 200 * np.sin(X) * np.cos(Y) + 100 * np.sin(2*X)
-        
-        # Write to GeoTIFF
-        driver = gdal.GetDriverByName('GTiff')
-        ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32)
-        ds.SetGeoTransform([minx, (maxx-minx)/width, 0, maxy, 0, -(maxy-miny)/height])
-        ds.SetProjection('EPSG:4326')
-        ds.GetRasterBand(1).WriteArray(elevation)
-        ds.FlushCache()
-        print(f"✅ Created synthetic DEM: {output_path}")
+   def _create_synthetic_dem(self, extent: List[float], output_path: str, resolution: int):
+    """Create synthetic DEM using rasterio only (no osgeo)"""
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+    
+    minx, miny, maxx, maxy = extent
+    width = height = resolution
+    
+    # Create synthetic elevation with hills
+    x = np.linspace(0, 2*np.pi, width)
+    y = np.linspace(0, 2*np.pi, height)
+    X, Y = np.meshgrid(x, y)
+    elevation = 1000 + 200 * np.sin(X) * np.cos(Y) + 100 * np.sin(2*X)
+    
+    # Calculate pixel size
+    pixel_width = (maxx - minx) / width
+    pixel_height = (maxy - miny) / height
+    
+    # Create transform
+    transform = from_origin(minx, maxy, pixel_width, pixel_height)
+    
+    # Write with rasterio (no osgeo needed)
+    with rasterio.open(
+        output_path,
+        'w',
+        driver='GTiff',
+        height=height,
+        width=width,
+        count=1,
+        dtype=elevation.dtype,
+        crs='EPSG:4326',
+        transform=transform
+    ) as dst:
+        dst.write(elevation, 1)
+    
+    print(f"✅ Created synthetic DEM: {output_path}")
     
     def calculate_slope(self, dem_path: str) -> str:
         """
