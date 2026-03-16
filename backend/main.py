@@ -8,6 +8,7 @@ from pathlib import Path
 # Define FRONTEND_DIR
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
+DATA_DIR = os.getenv("DATA_DIR", "/tmp/groundwater-data")
 
 import logging
 import traceback
@@ -16,7 +17,10 @@ import traceback
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
+# === FIX: Add these missing variables ===
+# Job tracking
+jobs_queue = {}
+results_cache = {}
 
 print(f"🔍 DATA_DIR environment variable: {os.getenv('DATA_DIR')}")
 print(f"🔍 Current working directory: {os.getcwd()}")
