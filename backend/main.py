@@ -8,7 +8,7 @@ import json
 import os
 from typing import Optional
 
-from leafmap_processor import LeafmapGroundwaterProcessor
+from backend.leafmap_processor import LeafmapGroundwaterProcessor
 from models import GroundwaterRequest, GroundwaterResponse, WEIGHTING_SCHEMES
 
 app = FastAPI(title="Groundwater AHP Platform", version="1.0.0")
