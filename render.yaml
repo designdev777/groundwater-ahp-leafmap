@@ -4,6 +4,7 @@ services:
     env: python
     pythonVersion: 3.11.8  # Force Python 3.11
     buildCommand: |
+      apt-get update && apt-get install -y gdal-bin libgdal-dev
       python --version  # This will show us which Python is used
       pip install --upgrade pip
       pip install numpy==1.24.3
