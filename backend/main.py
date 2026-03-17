@@ -123,7 +123,38 @@ async def debug_processor():
         }
 
 
-
+@app.get("/api/debug/results/{job_id}")
+async def debug_results(job_id: str):
+    """Debug endpoint to check result status"""
+    debug_info = {
+        "job_id": job_id,
+        "job_exists": job_id in jobs,
+        "cache_exists": job_id in results_cache,
+        "data_dir": DATA_DIR,
+        "output_dir_exists": os.path.exists(os.path.join(DATA_DIR, "output")),
+        "files_found": []
+    }
+    
+    if job_id in results_cache:
+        result = results_cache[job_id]
+        debug_info["result_keys"] = list(result.keys())
+        
+        # Check expected files
+        if "interactive_url" in result:
+            filename = result["interactive_url"].split("/")[-1]
+            file_path = os.path.join(DATA_DIR, "output", filename)
+            debug_info["html_file_exists"] = os.path.exists(file_path)
+            debug_info["html_file_path"] = file_path
+            
+        if "thumbnail_path" in result:
+            debug_info["thumb_file_exists"] = os.path.exists(result["thumbnail_path"])
+    
+    # List all files in output directory
+    output_dir = os.path.join(DATA_DIR, "output")
+    if os.path.exists(output_dir):
+        debug_info["files_found"] = os.listdir(output_dir)[:10]  # First 10 files
+    
+    return debug_info
 
 
 @app.get("/api/health")
@@ -235,18 +266,129 @@ async def get_job_status(job_id: str):
 
 @app.get("/results/{cache_key}.html")
 async def get_result_html(cache_key: str):
-    if cache_key not in results_cache:
-        raise HTTPException(404, "Result not found")
-    
-    html_content = results_cache[cache_key]["interactive_html"]
-    return HTMLResponse(content=html_content)
+    """Get the interactive HTML map for a completed job"""
+    try:
+        # Check if result exists in cache
+        if cache_key not in results_cache:
+            # Try to find the file directly
+            possible_files = [
+                os.path.join(DATA_DIR, "output", f"gwpz_{cache_key}.html"),
+                os.path.join(DATA_DIR, "output", f"{cache_key}.html"),
+                os.path.join(DATA_DIR, "thumbnails", f"gwpz_{cache_key}.html")
+            ]
+            
+            for file_path in possible_files:
+                if os.path.exists(file_path):
+                    logger.info(f"Found HTML file at {file_path}")
+                    return FileResponse(file_path)
+            
+            raise HTTPException(status_code=404, detail=f"Result not found for key: {cache_key}")
+        
+        # Get result from cache
+        result = results_cache[cache_key]
+        logger.info(f"Cache result keys: {result.keys()}")
+        
+        # Try multiple ways to get the HTML file
+        html_path = None
+        
+        # Method 1: Check interactive_url
+        if "interactive_url" in result:
+            filename = result["interactive_url"].split("/")[-1]
+            html_path = os.path.join(DATA_DIR, "output", filename)
+            logger.info(f"Trying path from interactive_url: {html_path}")
+        
+        # Method 2: Check if interactive_html is stored directly
+        if (not html_path or not os.path.exists(html_path)) and "interactive_html" in result:
+            # Save the HTML to a file if it's in the cache
+            html_path = os.path.join(DATA_DIR, "output", f"{cache_key}.html")
+            with open(html_path, 'w') as f:
+                f.write(result["interactive_html"])
+            logger.info(f"Saved interactive_html to {html_path}")
+        
+        # Method 3: Look for any HTML file with the cache_key
+        if not html_path or not os.path.exists(html_path):
+            pattern = os.path.join(DATA_DIR, "output", f"*{cache_key}*.html")
+            import glob
+            matching_files = glob.glob(pattern)
+            if matching_files:
+                html_path = matching_files[0]
+                logger.info(f"Found matching file: {html_path}")
+        
+        # Final check
+        if html_path and os.path.exists(html_path):
+            return FileResponse(html_path)
+        else:
+            # List all files in output directory for debugging
+            output_dir = os.path.join(DATA_DIR, "output")
+            files = os.listdir(output_dir) if os.path.exists(output_dir) else []
+            logger.error(f"No HTML file found. Files in output: {files[:10]}")
+            
+            raise HTTPException(
+                status_code=404, 
+                detail=f"HTML file not found. Cache key: {cache_key}, Tried path: {html_path}"
+            )
+            
+    except Exception as e:
+        logger.error(f"Error serving result HTML: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/thumbnails/{cache_key}.png")
 async def get_thumbnail(cache_key: str):
-    if cache_key not in results_cache:
-        raise HTTPException(404, "Thumbnail not found")
-    
-    return FileResponse(results_cache[cache_key]["thumbnail_path"])
+    """Get the thumbnail PNG for a completed job"""
+    try:
+        if cache_key not in results_cache:
+            # Try to find the file directly
+            possible_files = [
+                os.path.join(DATA_DIR, "thumbnails", f"gwpz_{cache_key}.png"),
+                os.path.join(DATA_DIR, "output", f"gwpz_{cache_key}.png"),
+                os.path.join(DATA_DIR, "thumbnails", f"{cache_key}.png")
+            ]
+            
+            for file_path in possible_files:
+                if os.path.exists(file_path):
+                    logger.info(f"Found thumbnail at {file_path}")
+                    return FileResponse(file_path)
+            
+            raise HTTPException(status_code=404, detail=f"Thumbnail not found for key: {cache_key}")
+        
+        result = results_cache[cache_key]
+        
+        # Try multiple ways to get the thumbnail
+        thumb_path = None
+        
+        # Method 1: Direct thumbnail_path
+        if "thumbnail_path" in result and os.path.exists(result["thumbnail_path"]):
+            thumb_path = result["thumbnail_path"]
+        
+        # Method 2: Check result_url for PNG
+        if not thumb_path and "result_url" in result:
+            filename = result["result_url"].split("/")[-1]
+            thumb_path = os.path.join(DATA_DIR, "output", filename)
+        
+        # Method 3: Look for any PNG with the cache_key
+        if not thumb_path or not os.path.exists(thumb_path):
+            import glob
+            patterns = [
+                os.path.join(DATA_DIR, "output", f"*{cache_key}*.png"),
+                os.path.join(DATA_DIR, "thumbnails", f"*{cache_key}*.png")
+            ]
+            for pattern in patterns:
+                matching_files = glob.glob(pattern)
+                if matching_files:
+                    thumb_path = matching_files[0]
+                    logger.info(f"Found matching thumbnail: {thumb_path}")
+                    break
+        
+        if thumb_path and os.path.exists(thumb_path):
+            return FileResponse(thumb_path)
+        else:
+            raise HTTPException(status_code=404, detail="Thumbnail file not found")
+            
+    except Exception as e:
+        logger.error(f"Error serving thumbnail: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/debug/clean")
 async def clean_jobs():
