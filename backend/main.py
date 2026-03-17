@@ -17,9 +17,8 @@ import traceback
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === FIX: Add these missing variables ===
-# Job tracking
-jobs_queue = {}
+# Job tracking - USE CONSISTENT VARIABLE NAMES
+jobs = {}  # Changed from jobs_queue to jobs for consistency
 results_cache = {}
 
 print(f"🔍 DATA_DIR environment variable: {os.getenv('DATA_DIR')}")
@@ -54,38 +53,35 @@ app.add_middleware(
 )
 
 # Initialize processor
-processor = LeafmapGroundwaterProcessor(data_dir=os.getenv("DATA_DIR"))
+try:
+    processor = LeafmapGroundwaterProcessor(data_dir=os.getenv("DATA_DIR"))
+    logger.info(f"✅ Processor initialized with data_dir: {processor.data_dir}")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize processor: {e}")
+    processor = None
 
 # Serve frontend
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+    logger.info(f"✅ Mounted static files from {FRONTEND_DIR}")
 
-# Then wrap your root endpoint with error handling:
 @app.get("/")
 async def root():
     """Serve the main HTML interface"""
     try:
         index_path = FRONTEND_DIR / "index.html"
         logger.info(f"Attempting to serve: {index_path}")
-        logger.info(f"File exists: {index_path.exists()}")
         
         if not index_path.exists():
-            logger.error(f"index.html not found at {index_path}")
-            # List directory contents
-            if FRONTEND_DIR.exists():
-                logger.info(f"Frontend dir contents: {list(FRONTEND_DIR.glob('*'))}")
             return JSONResponse(
                 status_code=404,
-                content={"error": "index.html not found", "path": str(index_path)}
+                content={"error": "index.html not found"}
             )
         
         return FileResponse(str(index_path))
     except Exception as e:
         logger.error(f"Error serving root: {e}")
-        logger.error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e), "trace": traceback.format_exc()}
-        )
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/api/test")
 async def test():
@@ -95,24 +91,35 @@ async def test():
         "message": "API is working",
         "frontend_exists": FRONTEND_DIR.exists(),
         "index_exists": (FRONTEND_DIR / "index.html").exists(),
-        "data_dir": DATA_DIR
+        "data_dir": DATA_DIR,
+        "processor_ok": processor is not None
+    }
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy", 
+        "processor": "leafmap",
+        "processor_initialized": processor is not None
     }
 
 @app.get("/api/debug/simple")
 async def simple_debug():
-    """Ultra-simple debug endpoint that should always work"""
+    """Simple debug endpoint"""
+    output_dir = os.path.join(DATA_DIR, "output")
     return {
         "status": "ok",
         "message": "Debug endpoint is working",
         "data_dir": DATA_DIR,
-        "output_dir_exists": os.path.exists(os.path.join(DATA_DIR, "output")),
+        "output_dir_exists": os.path.exists(output_dir),
         "jobs_count": len(jobs),
         "cache_count": len(results_cache)
     }
 
 @app.get("/api/debug/check/{job_id}")
 async def check_job_simple(job_id: str):
-    """Simple job check without complex error handling"""
+    """Simple job check"""
     result = {
         "job_id": job_id,
         "job_exists": job_id in jobs,
@@ -132,12 +139,11 @@ async def check_job_simple(job_id: str):
 @app.get("/api/debug/processor")
 async def debug_processor():
     """Test if processor is working"""
+    if processor is None:
+        return {"status": "error", "message": "Processor not initialized"}
+    
     try:
-        # Test with minimal extent
-        test_extent = [36.7, -1.5, 36.9, -1.3]
-        test_weights = {"geology": 0.3, "rainfall": 0.3, "slope": 0.2, "landuse": 0.2}
-        
-        # Just test directory creation
+        # Test directory creation
         processor._ensure_data_directories()
         
         return {
@@ -152,7 +158,6 @@ async def debug_processor():
             "error": str(e),
             "trace": traceback.format_exc()
         }
-
 
 @app.get("/api/debug/results/{job_id}")
 async def debug_results(job_id: str):
@@ -183,14 +188,9 @@ async def debug_results(job_id: str):
     # List all files in output directory
     output_dir = os.path.join(DATA_DIR, "output")
     if os.path.exists(output_dir):
-        debug_info["files_found"] = os.listdir(output_dir)[:10]  # First 10 files
+        debug_info["files_found"] = os.listdir(output_dir)[:10]
     
     return debug_info
-
-
-@app.get("/api/health")
-async def health_check():
-    return {"status": "healthy", "processor": "leafmap"}
 
 @app.get("/api/study-areas")
 async def get_study_areas():
@@ -211,12 +211,15 @@ async def get_study_areas():
 async def get_weighting_schemes():
     return {"schemes": WEIGHTING_SCHEMES}
 
-@app.post("/api/groundwater/analyze", response_model=GroundwaterResponse)
+@app.post("/api/groundwater/analyze")
 async def analyze_groundwater(request: GroundwaterRequest, background_tasks: BackgroundTasks):
     """Analyze groundwater potential using AHP"""
     try:
+        if processor is None:
+            raise HTTPException(status_code=500, detail="Processor not initialized")
+        
         job_id = str(uuid.uuid4())
-        logger.info(f"Starting analysis job {job_id} with request: {request}")
+        logger.info(f"Starting analysis job {job_id}")
         
         # Get weights based on scheme
         if request.weighting_scheme == "custom" and request.custom_weights:
@@ -224,8 +227,8 @@ async def analyze_groundwater(request: GroundwaterRequest, background_tasks: Bac
         else:
             weights = WEIGHTING_SCHEMES.get(request.weighting_scheme, WEIGHTING_SCHEMES["balanced"])
         
-        # Queue for processing
-        jobs_queue[job_id] = {"status": "processing", "request": request.dict()}
+        # Queue for processing - USE 'jobs' consistently
+        jobs[job_id] = {"status": "processing", "request": request.dict()}
         
         # Process in background
         background_tasks.add_task(
@@ -233,29 +236,22 @@ async def analyze_groundwater(request: GroundwaterRequest, background_tasks: Bac
             job_id, request.extent, weights, request.season
         )
         
-        return GroundwaterResponse(
-            job_id=job_id,
-            status="processing",
-            weights_used=weights
-        )
+        return {
+            "job_id": job_id,
+            "status": "processing",
+            "weights_used": weights
+        }
     except Exception as e:
         logger.error(f"Error in analyze_groundwater: {e}")
         logger.error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e), "trace": traceback.format_exc()}
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 async def process_groundwater_job(job_id: str, extent: list, weights: dict, season: str):
     """Background processing of groundwater analysis"""
     logger.info(f"🚀 Starting job {job_id}")
-    logger.info(f"📊 Extent: {extent}")
-    logger.info(f"⚖️ Weights: {weights}")
-    logger.info(f"🌦️ Season: {season}")
     
     try:
         # Run leafmap analysis
-        logger.info("Calling processor.full_ahp_analysis...")
         result = processor.full_ahp_analysis(
             extent=extent,
             weights=weights,
@@ -263,196 +259,117 @@ async def process_groundwater_job(job_id: str, extent: list, weights: dict, seas
         )
         logger.info(f"✅ Analysis complete for job {job_id}")
         
-        # Store result
+        # Store result - USE CONSISTENT VARIABLES
         results_cache[job_id] = result
-        jobs_queue[job_id] = {"status": "completed", "result": job_id}
+        jobs[job_id] = {"status": "completed", "result": job_id}
         logger.info(f"Job {job_id} stored in cache")
         
     except Exception as e:
         logger.error(f"❌ Job {job_id} failed: {e}")
         logger.error(traceback.format_exc())
-        jobs_queue[job_id] = {"status": "failed", "error": str(e)}
+        jobs[job_id] = {"status": "failed", "error": str(e)}
 
 @app.get("/api/groundwater/status/{job_id}")
 async def get_job_status(job_id: str):
-    if job_id not in jobs_queue:
-        raise HTTPException(404, "Job not found")
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
     
     job = jobs[job_id]
     
     if job["status"] == "completed":
-        # Generate cache key from job
-        cache_key = hashlib.md5(str(job["result"]).encode()).hexdigest()
         return {
             "job_id": job_id,
             "status": "completed",
-            "result_url": f"/results/{cache_key}.html",
-            "thumbnail_url": f"/thumbnails/{cache_key}.png",
-            "statistics": job["result"]["statistics"]
+            "result_url": f"/results/{job_id}.html",  # Use job_id directly
+            "thumbnail_url": f"/thumbnails/{job_id}.png",
+            "statistics": results_cache.get(job_id, {}).get("statistics", {})
         }
     elif job["status"] == "failed":
-        return {"job_id": job_id, "status": "failed", "error": job["error"]}
+        return {"job_id": job_id, "status": "failed", "error": job.get("error", "Unknown error")}
     else:
         return {"job_id": job_id, "status": "processing"}
 
-@app.get("/results/{cache_key}.html")
-async def get_result_html(cache_key: str):
+@app.get("/results/{job_id}.html")
+async def get_result_html(job_id: str):
     """Get the interactive HTML map for a completed job"""
     try:
-        # Check if result exists in cache
-        if cache_key not in results_cache:
-            # Try to find the file directly
-            possible_files = [
-                os.path.join(DATA_DIR, "output", f"gwpz_{cache_key}.html"),
-                os.path.join(DATA_DIR, "output", f"{cache_key}.html"),
-                os.path.join(DATA_DIR, "thumbnails", f"gwpz_{cache_key}.html")
-            ]
-            
-            for file_path in possible_files:
-                if os.path.exists(file_path):
-                    logger.info(f"Found HTML file at {file_path}")
-                    return FileResponse(file_path)
-            
-            raise HTTPException(status_code=404, detail=f"Result not found for key: {cache_key}")
+        # Check multiple possible locations
+        possible_paths = [
+            os.path.join(DATA_DIR, "output", f"gwpz_{job_id}.html"),
+            os.path.join(DATA_DIR, "output", f"{job_id}.html"),
+            os.path.join(DATA_DIR, "thumbnails", f"gwpz_{job_id}.html")
+        ]
         
-        # Get result from cache
-        result = results_cache[cache_key]
-        logger.info(f"Cache result keys: {result.keys()}")
+        # Also check if in cache with different filename
+        if job_id in results_cache:
+            result = results_cache[job_id]
+            if "interactive_url" in result:
+                filename = result["interactive_url"].split("/")[-1]
+                possible_paths.append(os.path.join(DATA_DIR, "output", filename))
         
-        # Try multiple ways to get the HTML file
-        html_path = None
+        for file_path in possible_paths:
+            if os.path.exists(file_path):
+                logger.info(f"Found HTML file at {file_path}")
+                return FileResponse(file_path)
         
-        # Method 1: Check interactive_url
-        if "interactive_url" in result:
-            filename = result["interactive_url"].split("/")[-1]
-            html_path = os.path.join(DATA_DIR, "output", filename)
-            logger.info(f"Trying path from interactive_url: {html_path}")
+        # If still not found, list directory contents
+        output_dir = os.path.join(DATA_DIR, "output")
+        files = os.listdir(output_dir) if os.path.exists(output_dir) else []
+        logger.error(f"HTML not found. Files in output: {files}")
         
-        # Method 2: Check if interactive_html is stored directly
-        if (not html_path or not os.path.exists(html_path)) and "interactive_html" in result:
-            # Save the HTML to a file if it's in the cache
-            html_path = os.path.join(DATA_DIR, "output", f"{cache_key}.html")
-            with open(html_path, 'w') as f:
-                f.write(result["interactive_html"])
-            logger.info(f"Saved interactive_html to {html_path}")
-        
-        # Method 3: Look for any HTML file with the cache_key
-        if not html_path or not os.path.exists(html_path):
-            pattern = os.path.join(DATA_DIR, "output", f"*{cache_key}*.html")
-            import glob
-            matching_files = glob.glob(pattern)
-            if matching_files:
-                html_path = matching_files[0]
-                logger.info(f"Found matching file: {html_path}")
-        
-        # Final check
-        if html_path and os.path.exists(html_path):
-            return FileResponse(html_path)
-        else:
-            # List all files in output directory for debugging
-            output_dir = os.path.join(DATA_DIR, "output")
-            files = os.listdir(output_dir) if os.path.exists(output_dir) else []
-            logger.error(f"No HTML file found. Files in output: {files[:10]}")
-            
-            raise HTTPException(
-                status_code=404, 
-                detail=f"HTML file not found. Cache key: {cache_key}, Tried path: {html_path}"
-            )
+        raise HTTPException(status_code=404, detail=f"HTML file not found for job {job_id}")
             
     except Exception as e:
         logger.error(f"Error serving result HTML: {e}")
-        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/thumbnails/{cache_key}.png")
-async def get_thumbnail(cache_key: str):
+@app.get("/thumbnails/{job_id}.png")
+async def get_thumbnail(job_id: str):
     """Get the thumbnail PNG for a completed job"""
     try:
-        if cache_key not in results_cache:
-            # Try to find the file directly
-            possible_files = [
-                os.path.join(DATA_DIR, "thumbnails", f"gwpz_{cache_key}.png"),
-                os.path.join(DATA_DIR, "output", f"gwpz_{cache_key}.png"),
-                os.path.join(DATA_DIR, "thumbnails", f"{cache_key}.png")
-            ]
-            
-            for file_path in possible_files:
-                if os.path.exists(file_path):
-                    logger.info(f"Found thumbnail at {file_path}")
-                    return FileResponse(file_path)
-            
-            raise HTTPException(status_code=404, detail=f"Thumbnail not found for key: {cache_key}")
+        possible_paths = [
+            os.path.join(DATA_DIR, "thumbnails", f"gwpz_{job_id}.png"),
+            os.path.join(DATA_DIR, "output", f"gwpz_{job_id}.png"),
+            os.path.join(DATA_DIR, "thumbnails", f"{job_id}.png"),
+            os.path.join(DATA_DIR, "output", f"{job_id}.png")
+        ]
         
-        result = results_cache[cache_key]
+        for file_path in possible_paths:
+            if os.path.exists(file_path):
+                logger.info(f"Found thumbnail at {file_path}")
+                return FileResponse(file_path)
         
-        # Try multiple ways to get the thumbnail
-        thumb_path = None
-        
-        # Method 1: Direct thumbnail_path
-        if "thumbnail_path" in result and os.path.exists(result["thumbnail_path"]):
-            thumb_path = result["thumbnail_path"]
-        
-        # Method 2: Check result_url for PNG
-        if not thumb_path and "result_url" in result:
-            filename = result["result_url"].split("/")[-1]
-            thumb_path = os.path.join(DATA_DIR, "output", filename)
-        
-        # Method 3: Look for any PNG with the cache_key
-        if not thumb_path or not os.path.exists(thumb_path):
-            import glob
-            patterns = [
-                os.path.join(DATA_DIR, "output", f"*{cache_key}*.png"),
-                os.path.join(DATA_DIR, "thumbnails", f"*{cache_key}*.png")
-            ]
-            for pattern in patterns:
-                matching_files = glob.glob(pattern)
-                if matching_files:
-                    thumb_path = matching_files[0]
-                    logger.info(f"Found matching thumbnail: {thumb_path}")
-                    break
-        
-        if thumb_path and os.path.exists(thumb_path):
-            return FileResponse(thumb_path)
-        else:
-            raise HTTPException(status_code=404, detail="Thumbnail file not found")
+        raise HTTPException(status_code=404, detail=f"Thumbnail not found for job {job_id}")
             
     except Exception as e:
         logger.error(f"Error serving thumbnail: {e}")
-        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/debug/clean")
 async def clean_jobs():
     """Clean up stuck jobs"""
-    global jobs_queue, results_cache
+    global jobs, results_cache
     
-    # Clear everything
-    jobs_queue.clear()
+    jobs.clear()
     results_cache.clear()
     
-    # Also clean up any files in data directory
-    import shutil
-    data_dirs = [
-        f"{DATA_DIR}/output",
-        f"{DATA_DIR}/cache",
-        f"{DATA_DIR}/thumbnails"
-    ]
-    
+    # Clean up files
     cleaned = []
-    for d in data_dirs:
-        if os.path.exists(d):
-            for f in os.listdir(d):
-                if f.endswith('.tif') or f.endswith('.png') or f.endswith('.html'):
+    for subdir in ["output", "cache", "thumbnails"]:
+        dir_path = os.path.join(DATA_DIR, subdir)
+        if os.path.exists(dir_path):
+            for f in os.listdir(dir_path):
+                if f.endswith(('.tif', '.png', '.html')):
                     try:
-                        os.remove(os.path.join(d, f))
+                        os.remove(os.path.join(dir_path, f))
                         cleaned.append(f)
                     except:
                         pass
     
     return {
         "status": "cleaned",
-        "jobs_queue": "cleared",
-        "results_cache": "cleared",
+        "jobs_cleared": len(jobs),
+        "cache_cleared": len(results_cache),
         "files_removed": len(cleaned)
     }
 
@@ -460,10 +377,12 @@ async def clean_jobs():
 async def test_minimal():
     """Run a minimal analysis for testing"""
     try:
+        if processor is None:
+            return {"status": "error", "message": "Processor not initialized"}
+        
         test_extent = [36.7, -1.5, 36.9, -1.3]
         test_weights = {"geology": 0.3, "rainfall": 0.3, "slope": 0.2, "landuse": 0.2}
         
-        # Run directly (not in background)
         result = processor.full_ahp_analysis(
             extent=test_extent,
             weights=test_weights,
