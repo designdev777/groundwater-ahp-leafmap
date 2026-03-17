@@ -4,28 +4,28 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     gdal-bin \
     libgdal-dev \
-    python3-gdal \
+    libspatialindex-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
-COPY backend/requirements.txt .
+# Copy requirements first (for better caching)
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY backend/ ./backend/
-COPY frontend/ ./frontend/
+# Copy the rest of the application
+COPY . .
 
-# Create data directories
-RUN mkdir -p /app/data/{preprocessed,cache,output}
+# Create data directory with proper permissions
+RUN mkdir -p /data/{output,cache,thumbnails,preprocessed} && \
+    chmod -R 777 /data
 
-# Set environment variables
-ENV PYTHONPATH=/app
-ENV DATA_DIR=/app/data
+# Set environment variable
+ENV DATA_DIR=/data
+ENV PYTHONUNBUFFERED=1
 
-# Expose port
+# Expose the port
 EXPOSE 8000
 
 # Run the application
