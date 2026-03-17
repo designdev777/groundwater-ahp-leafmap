@@ -37,60 +37,47 @@ class LeafmapGroundwaterProcessor:
         os.makedirs(f"{self.data_dir}/thumbnails", exist_ok=True)
         print(f"Directories created in {self.data_dir}")
     
-    def full_ahp_analysis(self, extent, weights, season='transitional'):
-        """
-        Run complete AHP groundwater analysis
-        This is a simplified version that returns mock data
-        """
-        print(f"Starting AHP analysis for extent: {extent}")
-        print(f"Weights: {weights}")
-        print(f"Season: {season}")
-        
-        # Generate a unique ID
-        unique_id = hashlib.md5(f"{extent}{weights}{season}{time.time()}".encode()).hexdigest()[:8]
-        
-        # Create a simple synthetic result
-        result_path = f"{self.data_dir}/output/gwpz_{unique_id}.tif"
-        self._create_synthetic_result(extent, result_path)
-        
-        # Create thumbnail
-        thumb_path = f"{self.data_dir}/thumbnails/gwpz_{unique_id}.png"
-        self._create_synthetic_thumbnail(result_path, thumb_path)
-        
-        # Create interactive map
-        html_path = f"{self.data_dir}/output/gwpz_{unique_id}.html"
-        self._create_synthetic_map(result_path, html_path)
-        
-        # Create PNG for web display
-        png_path = f"{self.data_dir}/output/gwpz_{unique_id}.png"
-        self._save_as_png(result_path, png_path)
-        
-        # Mock statistics
-        stats = {
-            'mean': 3.2,
-            'std': 1.1,
-            'min': 1.0,
-            'max': 5.0,
-            'zone_areas': {
-                'very_low': 150.5,
-                'low': 275.3,
-                'moderate': 420.8,
-                'high': 310.2,
-                'very_high': 180.6
-            }
-        }
-        
-        print("Analysis complete!")
-        
-        return {
-            'result_path': result_path,
-            'thumbnail_path': thumb_path,
-            'result_url': f"/results/gwpz_{unique_id}.png",
-            'interactive_url': f"/results/gwpz_{unique_id}.html",
-            'statistics': stats,
-            'weights_used': weights,
-            'season': season
-        }
+def full_ahp_analysis(self, extent, weights, season='transitional'):
+    # ... existing code ...
+    
+    # Generate a unique ID
+    unique_id = hashlib.md5(f"{extent}{weights}{season}{time.time()}".encode()).hexdigest()[:8]
+    
+    # Create synthetic result (your existing code)
+    result_path = f"{self.data_dir}/output/gwpz_{unique_id}.tif"
+    self._create_synthetic_result(extent, result_path)
+    
+    # Create thumbnail with consistent naming
+    thumb_path = f"{self.data_dir}/thumbnails/gwpz_{unique_id}.png"
+    self._create_synthetic_thumbnail(result_path, thumb_path)
+    
+    # Create interactive map with consistent naming
+    html_path = f"{self.data_dir}/output/gwpz_{unique_id}.html"
+    self._create_synthetic_map(result_path, html_path)
+    
+    # Create PNG with consistent naming
+    png_path = f"{self.data_dir}/output/gwpz_{unique_id}.png"
+    self._save_as_png(result_path, png_path)
+    
+    # Verify files were created
+    files_created = {
+        "tif": os.path.exists(result_path),
+        "png": os.path.exists(png_path),
+        "html": os.path.exists(html_path),
+        "thumb": os.path.exists(thumb_path)
+    }
+    print(f"📁 Files created: {files_created}")
+    
+    return {
+        'result_path': result_path,
+        'thumbnail_path': thumb_path,
+        'result_url': f"/results/gwpz_{unique_id}.png",
+        'interactive_url': f"/results/gwpz_{unique_id}.html",
+        'statistics': stats,
+        'weights_used': weights,
+        'season': season,
+        'job_id': unique_id  # Add this for easier debugging
+    }
     
     def _create_synthetic_result(self, extent, output_path):
         """Create a synthetic result raster"""
