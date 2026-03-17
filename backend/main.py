@@ -98,6 +98,37 @@ async def test():
         "data_dir": DATA_DIR
     }
 
+@app.get("/api/debug/simple")
+async def simple_debug():
+    """Ultra-simple debug endpoint that should always work"""
+    return {
+        "status": "ok",
+        "message": "Debug endpoint is working",
+        "data_dir": DATA_DIR,
+        "output_dir_exists": os.path.exists(os.path.join(DATA_DIR, "output")),
+        "jobs_count": len(jobs),
+        "cache_count": len(results_cache)
+    }
+
+@app.get("/api/debug/check/{job_id}")
+async def check_job_simple(job_id: str):
+    """Simple job check without complex error handling"""
+    result = {
+        "job_id": job_id,
+        "job_exists": job_id in jobs,
+        "cache_exists": job_id in results_cache,
+        "output_files": []
+    }
+    
+    # Check output directory for any files with this job_id
+    output_dir = os.path.join(DATA_DIR, "output")
+    if os.path.exists(output_dir):
+        for f in os.listdir(output_dir):
+            if job_id in f or job_id.replace("-", "") in f:
+                result["output_files"].append(f)
+    
+    return result
+
 @app.get("/api/debug/processor")
 async def debug_processor():
     """Test if processor is working"""
